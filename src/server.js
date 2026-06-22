@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import 'dotenv/config';
 import pinoHttp from 'pino-http';
 
+
+const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(pinoHttp());
 app.use(cors());
@@ -39,6 +41,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log(`Server running on: ${process.env.PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on: ${PORT}`);
 });

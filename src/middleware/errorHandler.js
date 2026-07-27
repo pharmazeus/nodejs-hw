@@ -1,6 +1,6 @@
 import { isHttpError } from 'http-errors';
 
-export default function errorHandler(err, req, res, next) {
+export const errorHandler = (err, req, res, next) => {
   void next;
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -14,4 +14,4 @@ export default function errorHandler(err, req, res, next) {
     message: isProd ? 'Server error' : err.message,
     ...(!isProd && { stack: err.stack }),
   });
-}
+};

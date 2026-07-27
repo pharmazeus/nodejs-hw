@@ -4,7 +4,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Pretty, colorized logs while developing; plain JSON in production
 // (pino-pretty is a devDependency and won't be installed on the server).
-export default function logger() {
+export const logger = () => {
   return pinoHttp({
     transport: isProduction
       ? undefined
@@ -17,4 +17,4 @@ export default function logger() {
           },
         },
   });
-}
+};

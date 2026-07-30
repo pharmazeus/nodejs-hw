@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export default async function connectMongoDB() {
+export const connectMongoDB = async () => {
   try {
     const Mongo_url = process.env.MONGO_URL;
     await mongoose.connect(Mongo_url);
@@ -9,4 +9,4 @@ export default async function connectMongoDB() {
     console.error('❌ Connection was not established', error);
     process.exit(1);
   }
-}
+};

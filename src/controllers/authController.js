@@ -1,11 +1,20 @@
+import { readFile } from 'node:fs/promises';
 import bcrypt from 'bcrypt';
 import createHttpError from 'http-errors';
+import handlebars from 'handlebars';
+import jwt from 'jsonwebtoken';
 import { isValidObjectId } from 'mongoose';
 import { Session } from '../models/session.js';
 import { User } from '../models/user.js';
 import { createSession, setSessionCookies } from '../services/auth.js';
+import { sendEmail } from '../utils/sendMail.js';
 
 const SALT_ROUNDS = 10;
+const RESET_EMAIL_SUCCESS_MESSAGE = 'Password reset email sent successfully';
+const resetPasswordTemplatePath = new URL(
+  '../templates/reset-password-email.html',
+  import.meta.url,
+);
 const cookieOptions = {
   httpOnly: true,
   secure: true,
@@ -87,4 +96,73 @@ export const logoutUser = async (req, res) => {
 
   clearSessionCookies(res);
   res.status(204).send();
+};
+
+export const requestResetEmail = async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(200).json({ message: RESET_EMAIL_SUCCESS_MESSAGE });
+  }
+
+  const token = jwt.sign(
+    { sub: user._id.toString(), email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' },
+  );
+  const frontendDomain = process.env.FRONTEND_DOMAIN.replace(/\/$/, '');
+  const resetLink = `${frontendDomain}/reset-password?token=${token}`;
+  const templateSource = await readFile(resetPasswordTemplatePath, 'utf-8');
+  const template = handlebars.compile(templateSource);
+  const html = template({ name: user.username, link: resetLink });
+
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: 'Reset your password',
+      html,
+    });
+  } catch {
+    throw createHttpError(
+      500,
+      'Failed to send the email, please try again later.',
+    );
+  }
+
+  res.status(200).json({ message: RESET_EMAIL_SUCCESS_MESSAGE });
+};
+
+export const resetPassword = async (req, res) => {
+  const { token, password } = req.body;
+  let payload;
+
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    throw createHttpError(401, 'Invalid or expired token');
+  }
+
+  if (
+    typeof payload !== 'object' ||
+    !payload.sub ||
+    !payload.email ||
+    !isValidObjectId(payload.sub)
+  ) {
+    throw createHttpError(401, 'Invalid or expired token');
+  }
+
+  const user = await User.findOne({
+    _id: payload.sub,
+    email: payload.email,
+  });
+
+  if (!user) {
+    throw createHttpError(404, 'User not found');
+  }
+
+  user.password = await bcrypt.hash(password, SALT_ROUNDS);
+  await user.save();
+
+  res.status(200).json({ message: 'Password reset successfully' });
 };

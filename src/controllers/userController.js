@@ -12,9 +12,13 @@ export const updateUserAvatar = async (req, res) => {
     req.user._id,
   );
 
-  await User.findByIdAndUpdate(req.user._id, {
-    avatar: uploadedImage.secure_url,
-  });
+  const updatedUser = await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      avatar: uploadedImage.secure_url,
+    },
+    { returnDocument: 'after' },
+  );
 
-  res.status(200).json({ url: uploadedImage.secure_url });
+  res.status(200).json({ url: updatedUser.avatar });
 };

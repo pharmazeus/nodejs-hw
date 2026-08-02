@@ -14,6 +14,7 @@ import { updateUserAvatar } from '../src/controllers/userController.js';
 import { upload } from '../src/middleware/multer.js';
 import { User } from '../src/models/user.js';
 import { saveFileToCloudinary } from '../src/utils/saveFileToCloudinary.js';
+import { sendEmail } from '../src/utils/sendMail.js';
 import {
   requestResetEmailSchema,
   resetPasswordSchema,
@@ -50,7 +51,11 @@ test('reset request and password bodies have the required validation', () => {
     email: 'not-an-email',
   });
   const validPasswordReset = resetPasswordSchema[Segments.BODY].validate({
-    password: 'new-password',
+    password: '12345678',
+    token: 'jwt-token',
+  });
+  const shortPasswordReset = resetPasswordSchema[Segments.BODY].validate({
+    password: '1234567',
     token: 'jwt-token',
   });
   const missingToken = resetPasswordSchema[Segments.BODY].validate({
@@ -60,6 +65,7 @@ test('reset request and password bodies have the required validation', () => {
   assert.equal(validEmail.error, undefined);
   assert.ok(invalidEmail.error);
   assert.equal(validPasswordReset.error, undefined);
+  assert.ok(shortPasswordReset.error);
   assert.ok(missingToken.error);
 });
 
@@ -75,6 +81,31 @@ test('user model has a default avatar and never serializes the password', () => 
     'https://ac.goit.global/fullstack/react/default-avatar.jpg',
   );
   assert.equal(serializedUser.password, undefined);
+});
+
+test('sendEmail is async and forwards email options unchanged', async (t) => {
+  setTestEmailEnvironment();
+  const originalCreateTransport = nodemailer.createTransport;
+  const emailOptions = {
+    from: 'sender@example.com',
+    to: 'user@example.com',
+    subject: 'Test email',
+    html: '<p>Test</p>',
+  };
+  let forwardedOptions;
+
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+  nodemailer.createTransport = () => ({
+    sendMail: async (options) => {
+      forwardedOptions = options;
+    },
+  });
+
+  assert.equal(sendEmail.constructor.name, 'AsyncFunction');
+  await sendEmail(emailOptions);
+  assert.equal(forwardedOptions, emailOptions);
 });
 
 test('requestResetEmail does not reveal whether an email exists', async (t) => {
@@ -296,6 +327,7 @@ test('updateUserAvatar stores and returns Cloudinary secure_url', async (t) => {
   const secureUrl = 'https://example.com/avatar.png';
   let updateFilter;
   let update;
+  let updateOptions;
 
   t.after(() => {
     cloudinary.uploader.upload_stream = originalUploadStream;
@@ -306,9 +338,11 @@ test('updateUserAvatar stores and returns Cloudinary secure_url', async (t) => {
       callback(null, { secure_url: secureUrl });
     },
   });
-  User.findByIdAndUpdate = async (filter, value) => {
+  User.findByIdAndUpdate = async (filter, value, options) => {
     updateFilter = filter;
     update = value;
+    updateOptions = options;
+    return { avatar: secureUrl };
   };
 
   const response = createResponse();
@@ -319,6 +353,7 @@ test('updateUserAvatar stores and returns Cloudinary secure_url', async (t) => {
 
   assert.equal(updateFilter, userId);
   assert.deepEqual(update, { avatar: secureUrl });
+  assert.deepEqual(updateOptions, { returnDocument: 'after' });
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.body, { url: secureUrl });
 });
